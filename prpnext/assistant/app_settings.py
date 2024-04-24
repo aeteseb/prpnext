@@ -3,10 +3,8 @@ import frappe
 @frappe.whitelist()
 def get_assistant_settings():
     user = frappe.session.user
-    print(user)
     try:
         app_settings = frappe.get_doc("Assistant App Settings", user)
-        print(app_settings)
     except frappe.DoesNotExistError as e:
         print(e)
         print("Creating new settings")
@@ -17,10 +15,7 @@ def get_assistant_settings():
         app_settings.seed_color = "FF8BC34A"
         app_settings.insert(ignore_permissions=True)
         frappe.db.commit()
-
-        print(app_settings, app_settings.name)
     
-    app_settings = frappe.get_doc("Assistant App Settings", user)
     return {
         "themeMode": app_settings.theme_mode,
         "seedColor": app_settings.seed_color
