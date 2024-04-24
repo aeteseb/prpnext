@@ -148,6 +148,8 @@ class InfomaniakChatModel(BaseChatModel):
     """Model name to use."""
     product_id: Optional[str] = Field(default=None, alias="product_id")
     """Automatically inferred from env var `INFOMANIAK_PRODUCT_ID` if not provided."""
+    infomaniak_api_key: Optional[str] = Field(default=None, alias="infomaniak_api_key")
+    """Automatically inferred from env var `INFOMANIAK_API_KEY` if not provided."""
     temperature: float = 0.7
     """What sampling temperature to use."""
     model_kwargs: Dict[str, Any] = Field(default_factory=dict)
@@ -187,7 +189,7 @@ class InfomaniakChatModel(BaseChatModel):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
-
+        print(values)
         values["infomaniak_api_key"] = convert_to_secret_str(
             get_from_dict_or_env(values, "infomaniak_api_key", "INFOMANIAK_API_KEY")
         )
