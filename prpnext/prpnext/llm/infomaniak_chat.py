@@ -189,7 +189,6 @@ class InfomaniakChatModel(BaseChatModel):
     @root_validator()
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
-        print(values)
         values["infomaniak_api_key"] = convert_to_secret_str(
             get_from_dict_or_env(values, "infomaniak_api_key", "INFOMANIAK_API_KEY")
         )
