@@ -80,5 +80,16 @@ def _get_subject(message: str) -> str:
 def get_chat_history() -> list[dict]:
     user = frappe.session.user
     chats = frappe.get_all("AI Chat", filters={"user": user}, fields=["subject", "name"])
-    print(len(chats), chats)
     return chats
+
+@frappe.whitelist()
+def delete_chat(chat_id: str):
+    frappe.delete_doc("AI Chat", chat_id)
+    return "Chat deleted"
+
+@frappe.whitelist()
+def delete_multiple_chats(chat_ids:str):
+    chat_ids = json.loads(chat_ids)
+    for chat_id in chat_ids:
+        frappe.delete_doc("AI Chat", chat_id)
+    return "Chats deleted"
