@@ -3,7 +3,9 @@ from operator import itemgetter
 import os
 from typing import (
     Any,
+    AsyncIterator,
     Dict,
+    Iterator,
     List,
     Literal,
     Mapping,
@@ -13,29 +15,38 @@ from typing import (
     TypeVar,
     TypedDict,
     Union,
+    cast,
     overload,
 )
 from langchain_core._api import beta
 from langchain_core.language_models import LanguageModelInput
-from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models.chat_models import BaseChatModel, generate_from_stream, agenerate_from_stream
 from langchain_core.utils import (
     build_extra_kwargs,
     get_pydantic_field_names,
     get_from_dict_or_env,
     convert_to_secret_str,
 )
+from langchain_core.callbacks import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 from langchain_core.pydantic_v1 import root_validator, BaseModel, Field
 from langchain_core.messages import (
     BaseMessage,
+    BaseMessageChunk,
     ChatMessage,
+    ChatMessageChunk,
     HumanMessage,
+    HumanMessageChunk,
     AIMessage,
+    AIMessageChunk,
     SystemMessage,
+    SystemMessageChunk,
     FunctionMessage,
+    FunctionMessageChunk,
     ToolMessage,
+    ToolMessageChunk,
 )
 from langchain_core.runnables import Runnable, RunnablePassthrough, RunnableMap
-from langchain_core.outputs import ChatResult, ChatGeneration
+from langchain_core.outputs import ChatResult, ChatGeneration, ChatGenerationChunk
 from langchain_core.output_parsers import PydanticOutputParser, JsonOutputParser
 import openai
 
@@ -108,6 +119,55 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
         raise TypeError(f"Got unknown type {message}")
     return message_dict
 
+def _convert_delta_to_message_chunk(
+    _dict: Mapping[str, Any], default_class: Type[BaseMessageChunk]
+) -> BaseMessageChunk:
+    id_ = _dict.get("id")
+    role = cast(str, _dict.get("role"))
+    content = cast(str, _dict.get("content") or "")
+    additional_kwargs: Dict = {}
+    if _dict.get("function_call"):
+        function_call = dict(_dict["function_call"])
+        if "name" in function_call and function_call["name"] is None:
+            function_call["name"] = ""
+        additional_kwargs["function_call"] = function_call
+    tool_call_chunks = []
+    if raw_tool_calls := _dict.get("tool_calls"):
+        additional_kwargs["tool_calls"] = raw_tool_calls
+        try:
+            tool_call_chunks = [
+                {
+                    "name": rtc["function"].get("name"),
+                    "args": rtc["function"].get("arguments"),
+                    "id": rtc.get("id"),
+                    "index": rtc["index"],
+                }
+                for rtc in raw_tool_calls
+            ]
+        except KeyError:
+            pass
+
+    if role == "user" or default_class == HumanMessageChunk:
+        return HumanMessageChunk(content=content, id=id_)
+    elif role == "assistant" or default_class == AIMessageChunk:
+        return AIMessageChunk(
+            content=content,
+            additional_kwargs=additional_kwargs,
+            id=id_,
+            tool_call_chunks=tool_call_chunks,
+        )
+    elif role == "system" or default_class == SystemMessageChunk:
+        return SystemMessageChunk(content=content, id=id_)
+    elif role == "function" or default_class == FunctionMessageChunk:
+        return FunctionMessageChunk(content=content, name=_dict["name"], id=id_)
+    elif role == "tool" or default_class == ToolMessageChunk:
+        return ToolMessageChunk(
+            content=content, tool_call_id=_dict["tool_call_id"], id=id_
+        )
+    elif role or default_class == ChatMessageChunk:
+        return ChatMessageChunk(content=content, role=role, id=id_)
+    else:
+        return default_class(content=content, id=id_)  # type: ignore
 
 _BM = TypeVar("_BM", bound=BaseModel)
 _DictOrPydanticClass = Union[Dict[str, Any], Type[_BM]]
@@ -159,6 +219,8 @@ class InfomaniakChatModel(BaseChatModel):
     request_timeout: Union[float, Tuple[float, float], Any, None] = Field(
         default=None, alias="timeout"
     )
+    streaming: bool = False
+    """Whether to stream the response."""
     max_retries: int = 2
     """Maximum number of retries to make when generating."""
     default_headers: Union[Mapping[str, str], None] = None
@@ -226,6 +288,7 @@ class InfomaniakChatModel(BaseChatModel):
         """Get the default parameters for calling Infomaniak API."""
         params = {
             "model": self.model_name,
+            "stream": self.streaming,
             "temperature": self.temperature,
             **self.model_kwargs,
         }
@@ -253,13 +316,57 @@ class InfomaniakChatModel(BaseChatModel):
         if system_fingerprint:
             combined["system_fingerprint"] = system_fingerprint
         return combined
+    
+    def _stream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        message_dicts, params = self._create_message_dicts(messages, stop)
+        params = {**params, **kwargs, "stream": True}
+        default_chunk_class = AIMessageChunk
+        with self.client.create(messages=message_dicts, **params) as response:
+            for chunk in response:
+                if not isinstance(chunk, dict):
+                    chunk = chunk.model_dump()
+                if len(chunk["choices"]) == 0:
+                    continue
+                choice = chunk["choices"][0]
+                if choice["delta"] is None:
+                    continue
+                chunk = _convert_delta_to_message_chunk(
+                    choice["delta"], default_chunk_class
+                )
+                generation_info = {}
+                if finish_reason := choice.get("finish_reason"):
+                    generation_info["finish_reason"] = finish_reason
+                logprobs = choice.get("logprobs")
+                if logprobs:
+                    generation_info["logprobs"] = logprobs
+                default_chunk_class = chunk.__class__
+                chunk = ChatGenerationChunk(
+                    message=chunk, generation_info=generation_info or None
+                )
+                if run_manager:
+                    run_manager.on_llm_new_token(
+                        chunk.text, chunk=chunk, logprobs=logprobs
+                    )
+                yield chunk
 
     def _generate(  # pylint: disable=arguments-differ
         self,
         messages: List[BaseMessage],
         stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if self.streaming:
+            stream_iter = self._stream(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            return generate_from_stream(stream_iter)
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {
             **params,
@@ -301,13 +408,59 @@ class InfomaniakChatModel(BaseChatModel):
             "model_name": self.model_name,
         }
         return ChatResult(generations=generations, llm_output=llm_output)
+    
+    async def _astream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        message_dicts, params = self._create_message_dicts(messages, stop)
+        params = {**params, **kwargs, "stream": True}
+
+        default_chunk_class = AIMessageChunk
+        response = await self.async_client.create(messages=message_dicts, **params)
+        async with response:
+            async for chunk in response:
+                if not isinstance(chunk, dict):
+                    chunk = chunk.model_dump()
+                if len(chunk["choices"]) == 0:
+                    continue
+                choice = chunk["choices"][0]
+                if choice["delta"] is None:
+                    continue
+                chunk = _convert_delta_to_message_chunk(
+                    choice["delta"], default_chunk_class
+                )
+                generation_info = {}
+                if finish_reason := choice.get("finish_reason"):
+                    generation_info["finish_reason"] = finish_reason
+                logprobs = choice.get("logprobs")
+                if logprobs:
+                    generation_info["logprobs"] = logprobs
+                default_chunk_class = chunk.__class__
+                chunk = ChatGenerationChunk(
+                    message=chunk, generation_info=generation_info or None
+                )
+                if run_manager:
+                    await run_manager.on_llm_new_token(
+                        token=chunk.text, chunk=chunk, logprobs=logprobs
+                    )
+                yield chunk
 
     async def _agenerate(  # pylint: disable=arguments-differ
         self,
         messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
+        stop: Optional[List[str]] = None,        
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
+        if self.streaming:
+            stream_iter = self._astream(
+                messages, stop=stop, run_manager=run_manager, **kwargs
+            )
+            return await agenerate_from_stream(stream_iter)
         message_dicts, params = self._create_message_dicts(messages, stop)
         params = {
             **params,

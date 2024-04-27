@@ -1,15 +1,21 @@
+import asyncio
 import json
-from re import I
 import frappe
 
 from langchain_core.messages.chat import ChatMessage
-from openai import chat
+
 from prpnext.prpnext.llm.infomaniak_chat import InfomaniakChatModel
 from langchain_core.output_parsers.json import JsonOutputParser
 
 @frappe.whitelist()
-def query_chat(messages: str, chat_id: str ) -> str:
+def query_chat(messages: str, chat_id: str ):
     """Query the chatbot with the given messages."""
+    print("Querying chatbot")
+    def _stream_chat():
+        for chunk in chat_model.stream(message_list):
+            print(chunk)
+            yield chunk
+
     user = frappe.session.user
 
     messages = json.loads(messages)

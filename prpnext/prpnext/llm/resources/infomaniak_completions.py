@@ -1,10 +1,13 @@
 from __future__ import annotations
-from typing import Dict, List, Literal, Mapping, Optional, Union, overload
+from typing import Dict, Iterable, List, Literal, Mapping, Optional, Union, overload
 
 import httpx
 from openai import NOT_GIVEN, NotGiven
 from openai._types import Omit
 from openai.types import Completion
+from openai.types.chat import ChatCompletion, ChatCompletionChunk, ChatCompletionMessageParam
+from openai._streaming import Stream, AsyncStream
+from openai._response import to_streamed_response_wrapper, async_to_streamed_response_wrapper
 from openai._compat import cached_property
 from openai._utils import required_args
 from openai._base_client import make_request_options
@@ -20,19 +23,96 @@ class Completions(SyncAPIResource):
     @cached_property
     def with_raw_response(self) -> CompletionsWithRawResponse:
         return CompletionsWithRawResponse(self)
+    
+    @cached_property
+    def with_streaming_response(self) -> CompletionsWithStreamingResponse:
+        return CompletionsWithStreamingResponse(self)
+    
+    @overload
+    def create(
+        self,
+        *,
+        messages: Iterable[ChatCompletionMessageParam],
+        model: Union[str, Literal["mixtral"]],
+        max_new_tokens: Optional[int] | NotGiven = NOT_GIVEN,
+        profile_type: Optional[Literal["standard", "creative", "strict"]] | NotGiven = NOT_GIVEN,
+        repetition_penalty: Optional[float] | NotGiven = NOT_GIVEN,
+        seed: Optional[int] | NotGiven = NOT_GIVEN,
+        stream: Optional[Literal[False]] | NotGiven = NOT_GIVEN,
+        system_prompt: Optional[str] | NotGiven = NOT_GIVEN,
+        temperature: Optional[float] | NotGiven = NOT_GIVEN,
+        top_k: Optional[int] | NotGiven = NOT_GIVEN,
+        top_p: Optional[float] | NotGiven = NOT_GIVEN,
+        truncate: Optional[int] | NotGiven = NOT_GIVEN,
+        typical_p: Optional[float] | NotGiven = NOT_GIVEN,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+    ) -> ChatCompletion:
+        ...
 
-    @required_args(["model", "messages"])
+    @overload
+    def create(
+        self,
+        *,
+        messages: Iterable[ChatCompletionMessageParam],
+        model: Union[str, Literal["mixtral"]],
+        max_new_tokens: Optional[int] | NotGiven = NOT_GIVEN,
+        profile_type: Optional[Literal["standard", "creative", "strict"]] | NotGiven = NOT_GIVEN,
+        repetition_penalty: Optional[float] | NotGiven = NOT_GIVEN,
+        seed: Optional[int] | NotGiven = NOT_GIVEN,
+        stream: Optional[Literal[True]] | NotGiven = NOT_GIVEN,
+        system_prompt: Optional[str] | NotGiven = NOT_GIVEN,
+        temperature: Optional[float] | NotGiven = NOT_GIVEN,
+        top_k: Optional[int] | NotGiven = NOT_GIVEN,
+        top_p: Optional[float] | NotGiven = NOT_GIVEN,
+        truncate: Optional[int] | NotGiven = NOT_GIVEN,
+        typical_p: Optional[float] | NotGiven = NOT_GIVEN,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+    ) -> Stream[ChatCompletionChunk]:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        messages: Iterable[ChatCompletionMessageParam],
+        model: Union[str, Literal["mixtral"]],
+        max_new_tokens: Optional[int] | NotGiven = NOT_GIVEN,
+        profile_type: Optional[Literal["standard", "creative", "strict"]] | NotGiven = NOT_GIVEN,
+        repetition_penalty: Optional[float] | NotGiven = NOT_GIVEN,
+        seed: Optional[int] | NotGiven = NOT_GIVEN,
+        stream: bool,
+        system_prompt: Optional[str] | NotGiven = NOT_GIVEN,
+        temperature: Optional[float] | NotGiven = NOT_GIVEN,
+        top_k: Optional[int] | NotGiven = NOT_GIVEN,
+        top_p: Optional[float] | NotGiven = NOT_GIVEN,
+        truncate: Optional[int] | NotGiven = NOT_GIVEN,
+        typical_p: Optional[float] | NotGiven = NOT_GIVEN,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+    ) -> ChatCompletion | Stream[ChatCompletionChunk]:
+        ...
+
+    @required_args(["model", "messages"], ["messages", "model", "stream"])
     def create(
         self,
         *,
         model: Union[str, Literal["mixtral"]],
-        messages: List[Dict[str, str]],
+        messages: Iterable[ChatCompletionMessageParam],
         max_new_tokens: Optional[int] | NotGiven = NOT_GIVEN,
         profile_type: (
             Optional[Literal["standard", "creative", "strict"]] | NotGiven
         ) = NOT_GIVEN,
         repetition_penalty: Optional[float] | NotGiven = NOT_GIVEN,
         seed: Optional[int] | NotGiven = NOT_GIVEN,
+        stream: Optional[bool] | NotGiven = NOT_GIVEN,
         system_prompt: Optional[str] | NotGiven = NOT_GIVEN,
         temperature: Optional[float] | NotGiven = NOT_GIVEN,
         top_k: Optional[int] | NotGiven = NOT_GIVEN,
@@ -45,7 +125,7 @@ class Completions(SyncAPIResource):
         extra_query: Query | None = None,
         extra_body: Body | None = None,
         timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
-    ) -> Completion:
+    ) -> ChatCompletion | Stream[ChatCompletionChunk]:
         """
         Creates a completion for the provided prompt and parameters.
 
@@ -75,6 +155,8 @@ class Completions(SyncAPIResource):
             The usual range for this parameter is between 0.5 to 1.2.
 
           seed: A random seed to ensure reproducibility.
+
+          stream: Stream the response. If set to true, the response will be streamed.
 
           system_prompt: System prompt at the beginning of the conversation with the model
             Examples:You are a helpful assistant
@@ -126,6 +208,7 @@ class Completions(SyncAPIResource):
                 "profile_type": profile_type,
                 "repetition_penalty": repetition_penalty,
                 "seed": seed,
+                "stream": stream,
                 "system_prompt": system_prompt,
                 "temperature": temperature,
                 "top_k": top_k,
@@ -139,7 +222,9 @@ class Completions(SyncAPIResource):
                 extra_body=extra_body,
                 timeout=timeout,
             ),
-            cast_to=Completion,
+            cast_to=ChatCompletion,
+            stream=stream or False,
+            stream_cls=Stream[ChatCompletionChunk],
         )
 
 
@@ -147,8 +232,84 @@ class AsyncCompletions(AsyncAPIResource):
     @cached_property
     def with_raw_response(self) -> AsyncCompletionsWithRawResponse:
         return AsyncCompletionsWithRawResponse(self)
+    
+    @cached_property
+    def with_streaming_response(self) -> AsyncCompletionsWithStreamingResponse:
+        return AsyncCompletionsWithStreamingResponse(self)
+    
+    @overload
+    async def create(
+        self,
+        *,
+        messages: Iterable[ChatCompletionMessageParam],
+        model: Union[str, Literal["mixtral"]],
+        max_new_tokens: Optional[int] | NotGiven = NOT_GIVEN,
+        profile_type: Optional[Literal["standard", "creative", "strict"]] | NotGiven = NOT_GIVEN,
+        repetition_penalty: Optional[float] | NotGiven = NOT_GIVEN,
+        seed: Optional[int] | NotGiven = NOT_GIVEN,
+        stream: Optional[Literal[False]] | NotGiven = NOT_GIVEN,
+        system_prompt: Optional[str] | NotGiven = NOT_GIVEN,
+        temperature: Optional[float] | NotGiven = NOT_GIVEN,
+        top_k: Optional[int] | NotGiven = NOT_GIVEN,
+        top_p: Optional[float] | NotGiven = NOT_GIVEN,
+        truncate: Optional[int] | NotGiven = NOT_GIVEN,
+        typical_p: Optional[float] | NotGiven = NOT_GIVEN,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+    ) -> ChatCompletion:
+        ...
 
-    @required_args(["model", "messages"])
+    @overload
+    async def create(
+        self,
+        *,
+        messages: Iterable[ChatCompletionMessageParam],
+        model: Union[str, Literal["mixtral"]],
+        max_new_tokens: Optional[int] | NotGiven = NOT_GIVEN,
+        profile_type: Optional[Literal["standard", "creative", "strict"]] | NotGiven = NOT_GIVEN,
+        repetition_penalty: Optional[float] | NotGiven = NOT_GIVEN,
+        seed: Optional[int] | NotGiven = NOT_GIVEN,
+        stream: Optional[Literal[True]] | NotGiven = NOT_GIVEN,
+        system_prompt: Optional[str] | NotGiven = NOT_GIVEN,
+        temperature: Optional[float] | NotGiven = NOT_GIVEN,
+        top_k: Optional[int] | NotGiven = NOT_GIVEN,
+        top_p: Optional[float] | NotGiven = NOT_GIVEN,
+        truncate: Optional[int] | NotGiven = NOT_GIVEN,
+        typical_p: Optional[float] | NotGiven = NOT_GIVEN,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+    ) -> AsyncStream[ChatCompletionChunk]:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        messages: Iterable[ChatCompletionMessageParam],
+        model: Union[str, Literal["mixtral"]],
+        max_new_tokens: Optional[int] | NotGiven = NOT_GIVEN,
+        profile_type: Optional[Literal["standard", "creative", "strict"]] | NotGiven = NOT_GIVEN,
+        repetition_penalty: Optional[float] | NotGiven = NOT_GIVEN,
+        seed: Optional[int] | NotGiven = NOT_GIVEN,
+        stream: bool,
+        system_prompt: Optional[str] | NotGiven = NOT_GIVEN,
+        temperature: Optional[float] | NotGiven = NOT_GIVEN,
+        top_k: Optional[int] | NotGiven = NOT_GIVEN,
+        top_p: Optional[float] | NotGiven = NOT_GIVEN,
+        truncate: Optional[int] | NotGiven = NOT_GIVEN,
+        typical_p: Optional[float] | NotGiven = NOT_GIVEN,
+        extra_headers: Headers | None = None,
+        extra_query: Query | None = None,
+        extra_body: Body | None = None,
+        timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
+    ) -> ChatCompletion | AsyncStream[ChatCompletionChunk]:
+        ...
+
+    @required_args(["model", "messages"], ["messages", "model", "stream"])
     async def create(
         self,
         *,
@@ -160,6 +321,7 @@ class AsyncCompletions(AsyncAPIResource):
         ) = NOT_GIVEN,
         repetition_penalty: Optional[float] | NotGiven = NOT_GIVEN,
         seed: Optional[int] | NotGiven = NOT_GIVEN,
+        stream: Optional[bool] | NotGiven = NOT_GIVEN,
         system_prompt: Optional[str] | NotGiven = NOT_GIVEN,
         temperature: Optional[float] | NotGiven = NOT_GIVEN,
         top_k: Optional[int] | NotGiven = NOT_GIVEN,
@@ -172,7 +334,7 @@ class AsyncCompletions(AsyncAPIResource):
         extra_query: Query | None = None,
         extra_body: Body | None = None,
         timeout: float | httpx.Timeout | None | NotGiven = NOT_GIVEN,
-    ) -> Completion:
+    ) -> ChatCompletion | AsyncStream[ChatCompletionChunk]:
         """
         Creates a completion for the provided prompt and parameters.
 
@@ -202,6 +364,8 @@ class AsyncCompletions(AsyncAPIResource):
             The usual range for this parameter is between 0.5 to 1.2.
 
             seed: A random seed to ensure reproducibility.
+
+            stream: Stream the response. If set to true, the response will be streamed.
 
             system_prompt: System prompt at the beginning of the conversation with the model
             Examples:You are a helpful assistant
@@ -253,6 +417,7 @@ class AsyncCompletions(AsyncAPIResource):
                 "profile_type": profile_type,
                 "repetition_penalty": repetition_penalty,
                 "seed": seed,
+                "stream": stream,
                 "system_prompt": system_prompt,
                 "temperature": temperature,
                 "top_k": top_k,
@@ -266,7 +431,9 @@ class AsyncCompletions(AsyncAPIResource):
                 extra_body=extra_body,
                 timeout=timeout,
             ),
-            cast_to=Completion,
+            cast_to=ChatCompletion,
+            stream=stream or False,
+            stream_cls=AsyncStream[ChatCompletionChunk],
         )
 
 
@@ -284,5 +451,22 @@ class AsyncCompletionsWithRawResponse:
         self._completions = completions
 
         self.create = _legacy_response.async_to_raw_response_wrapper(
+            completions.create,
+        )
+
+class CompletionsWithStreamingResponse:
+    def __init__(self, completions: Completions) -> None:
+        self._completions = completions
+
+        self.create = to_streamed_response_wrapper(
+            completions.create,
+        )
+
+
+class AsyncCompletionsWithStreamingResponse:
+    def __init__(self, completions: AsyncCompletions) -> None:
+        self._completions = completions
+
+        self.create = async_to_streamed_response_wrapper(
             completions.create,
         )
