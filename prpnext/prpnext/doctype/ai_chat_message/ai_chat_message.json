@@ -1,0 +1,61 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-04-26 19:40:31.550394",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user_info_section",
+  "user",
+  "chat_message_section",
+  "role",
+  "message"
+ ],
+ "fields": [
+  {
+   "fieldname": "user_info_section",
+   "fieldtype": "Section Break",
+   "label": "User Info"
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "chat_message_section",
+   "fieldtype": "Section Break",
+   "label": "Chat Message"
+  },
+  {
+   "fieldname": "role",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Role",
+   "options": "assistant\nuser",
+   "reqd": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Text",
+   "in_list_view": 1,
+   "label": "Message",
+   "not_nullable": 1,
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2024-04-26 20:13:02.540563",
+ "modified_by": "Administrator",
+ "module": "PRPnext",
+ "name": "AI Chat Message",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

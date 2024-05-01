@@ -1,0 +1,80 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:user",
+ "creation": "2024-04-24 18:41:17.355500",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user_info_section",
+  "user",
+  "column_break_nypy",
+  "settings_section",
+  "theme_mode",
+  "seed_color"
+ ],
+ "fields": [
+  {
+   "fieldname": "user_info_section",
+   "fieldtype": "Section Break",
+   "label": "User Info"
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "unique": 1
+  },
+  {
+   "fieldname": "column_break_nypy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "settings_section",
+   "fieldtype": "Section Break",
+   "label": "Settings"
+  },
+  {
+   "fieldname": "theme_mode",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Theme Mode",
+   "options": "system\nlight\ndark",
+   "reqd": 1
+  },
+  {
+   "fieldname": "seed_color",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Seed Color",
+   "not_nullable": 1,
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2024-04-24 20:13:34.595568",
+ "modified_by": "Administrator",
+ "module": "PRPnext",
+ "name": "Assistant App Settings",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
