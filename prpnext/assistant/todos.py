@@ -214,7 +214,7 @@ def set_description(id: str, description: str) -> None:
     """Set description for a todo"""
     doc = frappe.get_doc("ToDo", id)
     _assert_allocated_to(doc)
-    _set_description(doc, description, save_doc=True)
+    _set_description(doc, description)
 
 
 def _set_description(doc, description: str | None):
